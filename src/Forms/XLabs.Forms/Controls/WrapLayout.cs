@@ -20,7 +20,9 @@
 // 
 
 using System;
+using System.ComponentModel;
 using System.Linq;
+using Windows.UI.Xaml;
 using Xamarin.Forms;
 
 namespace XLabs.Forms.Controls
@@ -39,10 +41,32 @@ namespace XLabs.Forms.Controls
             BindableProperty.Create<WrapLayout, StackOrientation>(w => w.Orientation, StackOrientation.Vertical,
                 propertyChanged: (bindable, oldvalue, newvalue) => ((WrapLayout)bindable).OnSizeChanged());
 
-        /// <summary>
-        /// Orientation (Horizontal or Vertical)
-        /// </summary>
-        public StackOrientation Orientation
+		public enum Flow {
+			/// <summary>
+			/// Left-To-Right Direction
+			/// </summary>		
+			[Description("Left-To-Right Direction")]
+			LTR = 0,
+			/// <summary>
+			/// Right-To-Left Direction
+			/// </summary>		
+			[Description("Right-To-Left Direction")]
+			RTL = 1
+		};
+		public static readonly BindableProperty FlowDirectionProperty =
+  BindableProperty.Create("FlowDirectionProperty", typeof(Flow), typeof(WrapLayout) , new Flow());
+
+		/// <summary>
+		/// Left-To-Right or Right-To-Left Direction
+		/// </summary>		
+
+		public Flow FlowDirection
+		{
+			get { return (Flow)GetValue(FlowDirectionProperty); }
+			set { SetValue(FlowDirectionProperty, value); }
+		}
+
+		public StackOrientation Orientation
         {
             get { return (StackOrientation)GetValue(OrientationProperty); }
             set { SetValue(OrientationProperty, value); }
@@ -126,7 +150,7 @@ namespace XLabs.Forms.Controls
             double minHeight = 0;
             double heightUsed = 0;
 
-            foreach (var size in Children.Where(c => c.IsVisible).Select(item => item.GetSizeRequest(widthConstraint, heightConstraint)))
+            foreach (var size in Children.Where(c => c.IsVisible).Select(item => item.Measure(widthConstraint, heightConstraint)))
             {
                 width = Math.Max(width, size.Request.Width);
 
@@ -176,7 +200,7 @@ namespace XLabs.Forms.Controls
 
             foreach (var item in Children.Where(c => c.IsVisible))
             {
-                var size = item.GetSizeRequest(widthConstraint, heightConstraint);
+                var size = item.Measure(widthConstraint, heightConstraint);
 
                 height = Math.Max(height, size.Request.Height);
 
@@ -220,70 +244,144 @@ namespace XLabs.Forms.Controls
         {
             if (Orientation == StackOrientation.Vertical)
             {
-                double colWidth = 0;
-                var yPos = y;
-                var xPos = x;
+				if (FlowDirection == Flow.RTL)
+				{
+					double colWidth = 0;
+					var yPos = y;
+					var xPos = width;
+					double xPos2 = 0;
 
-                foreach (var child in Children.Where(c => c.IsVisible))
-                {
-                    var request = child.GetSizeRequest(width, height);
+					foreach (var child in Children.Where(c => c.IsVisible))
+					{
+						var request = child.Measure(width, height);
+						var childWidth = request.Request.Width;
+						var childHeight = request.Request.Height;
+						colWidth = Math.Max(colWidth, childWidth);
 
-                    var childWidth = request.Request.Width;
-                    var childHeight = request.Request.Height;
+						if (yPos + childHeight > height)
+						{
+							yPos = y;
+							xPos2 += colWidth + Spacing;
+						}
 
-                    colWidth = Math.Max(colWidth, childWidth);
+						var region = new Rectangle(xPos - (childWidth + xPos2 + Spacing), yPos, childWidth + Spacing, childHeight);
 
-                    if (yPos + childHeight > height)
-                    {
-                        yPos = y;
-                        xPos += colWidth + Spacing;
-                        colWidth = 0;
-                    }
+						LayoutChildIntoBoundingRegion(child, region);
 
-                    var region = new Rectangle(xPos, yPos, childWidth, childHeight);
+						yPos += region.Height + Spacing;
+					}
+				}
+				else
+				{
+					double colWidth = 0;
+					var yPos = y;
+					var xPos = x;
 
-                    LayoutChildIntoBoundingRegion(child, region);
+					foreach (var child in Children.Where(c => c.IsVisible))
+					{
+						var request = child.Measure(width, height);
 
-                    yPos += region.Height + Spacing;
-                }
-            }
+						var childWidth = request.Request.Width;
+						var childHeight = request.Request.Height;
+
+						colWidth = Math.Max(colWidth, childWidth);
+
+						if (yPos + childHeight > height)
+						{
+							yPos = y;
+							xPos += colWidth + Spacing;
+							colWidth = 0;
+						}
+
+						var region = new Rectangle(xPos, yPos, childWidth, childHeight);
+
+						LayoutChildIntoBoundingRegion(child, region);
+
+						yPos += region.Height + Spacing;
+					}
+				}
+			}
             else
             {
-                double rowHeight = 0;
-                var yPos = y;
-                var xPos = x;
+				if (FlowDirection == Flow.RTL)
+				{
+					double rowHeight = 0;
+					var yPos = y;
+					var xPos = x;
 
-                double max = 0;
+					double max = 0;
 
-                foreach (var child in Children.Where(c => c.IsVisible))
-                {
-                    var request = child.GetSizeRequest(width, height);
-                    max = Math.Max(max, request.Request.Width);
-                }
+					foreach (var child in Children.Where(c => c.IsVisible))
+					{
+						var request = child.Measure(width, height);
+						max = Math.Max(max, request.Request.Width);
+					}
 
-                foreach (var child in Children.Where(c => c.IsVisible))
-                {
-                    var request = child.GetSizeRequest(width, height);
+					xPos = width;
 
-                    var childWidth = request.Request.Width;
-                    var childHeight = request.Request.Height;
+					foreach (var child in Children.Where(c => c.IsVisible))
+					{
+						var request = child.Measure(width, height);
 
-                    rowHeight = Math.Max(rowHeight, childHeight);
+						var childWidth = request.Request.Width;
+						var childHeight = request.Request.Height;
 
-                    if (xPos + childWidth > width)
-                    {
-                        xPos = x;
-                        yPos += rowHeight + Spacing;
-                        rowHeight = 0;
-                    }
+						rowHeight = Math.Max(rowHeight, childHeight);
 
-                    var region = new Rectangle(xPos, yPos, childWidth, childHeight);
+						if (childWidth > xPos)
+						{
+							xPos = width - childWidth - Spacing;
+							yPos += rowHeight + Spacing;
+							rowHeight = 0;
+						}
+						else
+						{
+							xPos = xPos - childWidth - Spacing;
+						}
 
-                    LayoutChildIntoBoundingRegion(child, region);
+						var region = new Rectangle(xPos, yPos, childWidth, childHeight);
 
-                    xPos += region.Width + Spacing;
-                }
+						LayoutChildIntoBoundingRegion(child, region);
 
+					}
+				}
+				else
+				{
+					double rowHeight = 0;
+					var yPos = y;
+					var xPos = x;
+
+					double max = 0;
+
+					foreach (var child in Children.Where(c => c.IsVisible))
+					{
+						var request = child.Measure(width, height);
+						max = Math.Max(max, request.Request.Width);
+					}
+
+					foreach (var child in Children.Where(c => c.IsVisible))
+					{
+						var request = child.Measure(width, height);
+
+						var childWidth = request.Request.Width;
+						var childHeight = request.Request.Height;
+
+						rowHeight = Math.Max(rowHeight, childHeight);
+
+						if (xPos + childWidth > width)
+						{
+							xPos = x;
+							yPos += rowHeight + Spacing;
+							rowHeight = 0;
+						}
+
+						var region = new Rectangle(xPos, yPos, childWidth, childHeight);
+
+						LayoutChildIntoBoundingRegion(child, region);
+
+						xPos += region.Width + Spacing;
+					}
+				}
             }
         }
     }
